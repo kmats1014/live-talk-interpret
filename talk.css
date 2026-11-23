@@ -1017,17 +1017,119 @@ body[data-talk-mode="room"] .face-only {
 /* Responsive */
 @media (max-width: 640px) {
   .talk-header {
+    flex-wrap: wrap;
+    row-gap: 6px;
     padding: 8px 10px;
+  }
+  .header-left {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+  .header-right {
+    flex: 1 1 100%;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  body[data-role="guest"] .talk-header {
+    flex-wrap: nowrap;
+  }
+  body[data-role="guest"] .header-left,
+  body[data-role="guest"] .header-right {
+    flex: 0 1 auto;
+  }
+  .brand-group {
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow: hidden;
   }
   .talk-title {
     font-size: 0.92rem;
   }
+  .status-pill {
+    font-size: 0.7rem;
+    padding: 2px 7px;
+  }
+  .e2ee-pill {
+    font-size: 0.66rem;
+    padding: 2px 5px;
+  }
+  .mode-segmented {
+    flex: 1 1 auto;
+  }
+  .mode-seg-btn {
+    flex: 1 1 0;
+    padding: 5px 6px;
+    font-size: 0.75rem;
+    text-align: center;
+  }
+  .btn {
+    padding: 5px 9px;
+    font-size: 0.78rem;
+  }
   .hide-xs {
     display: none;
+  }
+
+  .talk-subbar {
+    padding: 6px 10px;
+    gap: 6px 8px;
+    font-size: 0.76rem;
+  }
+  .subbar-divider {
+    display: none;
+  }
+  .subbar-label {
+    font-size: 0.72rem;
+  }
+  .compact-select {
+    padding: 4px 6px;
+    font-size: 0.78rem;
+    max-width: 132px;
+  }
+  .glossary-toggle {
+    font-size: 0.76rem;
+  }
+  .api-pill {
+    font-size: 0.68rem;
+    padding: 2px 6px;
+  }
+
+  .talk-main {
+    padding: 12px 10px 14px;
+  }
+  .empty-state {
+    padding: 10px 6px;
+  }
+  .empty-icon {
+    font-size: 2rem;
+    margin-bottom: 4px;
+  }
+  .empty-state h2 {
+    font-size: 1rem;
+  }
+  .empty-state p {
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+  .empty-tips {
+    margin-top: 10px;
+    gap: 6px;
+  }
+  .tip-pill {
+    font-size: 0.72rem;
+    padding: 4px 8px;
+  }
+
+  .talk-dock {
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
   }
   .dock-room-controls {
     flex-direction: column;
     align-items: stretch;
+  }
+  .text-input {
+    font-size: 16px;
+    padding: 8px 12px;
   }
   .msg-row {
     max-width: 92%;
@@ -1035,8 +1137,20 @@ body[data-talk-mode="room"] .face-only {
   .face-mic-row {
     gap: 8px;
   }
+  .face-mic-row .mic-btn {
+    white-space: normal;
+    line-height: 1.25;
+    padding: 10px 8px;
+    font-size: 0.82rem;
+  }
+  .face-sender-select {
+    max-width: 96px;
+  }
   .mic-btn {
-    padding: 11px 12px;
-    font-size: 0.86rem;
+    padding: 10px 12px;
+    font-size: 0.88rem;
+  }
+  .invite-qr-wrap {
+    justify-content: center;
   }
 }
