@@ -272,9 +272,10 @@ class BidirectionalTalkApp {
       }
     }
 
-    // 状態管理
-    this.talkMode = 'room'; // 'room' | 'face' (ホストのみ切替可)
+    // 状態管理（ホストのデフォルトはGoogle翻訳風の1端末対面モード、ゲストはルームモード）
+    this.talkMode = this.isGuest ? 'room' : 'face';
     this.splitFlip = false;
+    this.textDrawerOpen = false;
     this.autoSpeak = false; // 要件通りデフォルトOFF
     this.messages = []; // { id, senderId, senderName, sourceLang, sourceText, translations, ts, pending, sideRole? }
     this.participants = new Map(); // clientId -> { name, lang, lastSeen }
@@ -312,19 +313,21 @@ class BidirectionalTalkApp {
       headerTitle: document.getElementById('headerTitle'),
       connStatusBadge: document.getElementById('connStatusBadge'),
       connStatusText: document.getElementById('connStatusText'),
+      activeContextBadge: document.getElementById('activeContextBadge'),
       e2eeBadge: document.getElementById('e2eeBadge'),
 
       modeRoomBtn: document.getElementById('modeRoomBtn'),
       modeFaceBtn: document.getElementById('modeFaceBtn'),
       openInviteBtn: document.getElementById('openInviteBtn'),
+      quickInviteBtn: document.getElementById('quickInviteBtn'),
       peerCountBadge: document.getElementById('peerCountBadge'),
       autoSpeakToggleBtn: document.getElementById('autoSpeakToggleBtn'),
       autoSpeakIcon: document.getElementById('autoSpeakIcon'),
       autoSpeakLabel: document.getElementById('autoSpeakLabel'),
       openSettingsBtn: document.getElementById('openSettingsBtn'),
 
-      myLangLabel: document.getElementById('myLangLabel'),
       myLangSelect: document.getElementById('myLangSelect'),
+      swapLangBtn: document.getElementById('swapLangBtn'),
       partnerLangSelect: document.getElementById('partnerLangSelect'),
       toneSelect: document.getElementById('toneSelect'),
       useGlossaryCheck: document.getElementById('useGlossaryCheck'),
@@ -345,20 +348,22 @@ class BidirectionalTalkApp {
       interimSpeakerBadge: document.getElementById('interimSpeakerBadge'),
       interimText: document.getElementById('interimText'),
 
+      textInputDrawer: document.getElementById('textInputDrawer'),
+      unifiedTextForm: document.getElementById('unifiedTextForm'),
+      unifiedTextInput: document.getElementById('unifiedTextInput'),
+      faceTextSenderSelect: document.getElementById('faceTextSenderSelect'),
+
       roomControls: document.getElementById('roomControls'),
       roomMicBtn: document.getElementById('roomMicBtn'),
       roomMicLabel: document.getElementById('roomMicLabel'),
-      roomTextForm: document.getElementById('roomTextForm'),
-      roomTextInput: document.getElementById('roomTextInput'),
+      toggleKeyboardRoomBtn: document.getElementById('toggleKeyboardRoomBtn'),
 
       faceControls: document.getElementById('faceControls'),
       faceMicSelfBtn: document.getElementById('faceMicSelfBtn'),
       faceMicSelfLabel: document.getElementById('faceMicSelfLabel'),
       faceMicPartnerBtn: document.getElementById('faceMicPartnerBtn'),
       faceMicPartnerLabel: document.getElementById('faceMicPartnerLabel'),
-      faceTextForm: document.getElementById('faceTextForm'),
-      faceTextSenderSelect: document.getElementById('faceTextSenderSelect'),
-      faceTextInput: document.getElementById('faceTextInput'),
+      toggleKeyboardFaceBtn: document.getElementById('toggleKeyboardFaceBtn'),
 
       inviteDialog: document.getElementById('inviteDialog'),
       inviteQrBox: document.getElementById('inviteQrBox'),
@@ -471,8 +476,27 @@ class BidirectionalTalkApp {
       this.configureInterpreter();
     }
 
+    const isFace = this.talkMode === 'face';
+    this.el.roomControls.hidden = isFace;
+    this.el.faceControls.hidden = !isFace;
+    this.el.facePartnerStage.hidden = !isFace || !this.splitFlip;
+
     this.applyLocaleUI();
+    this.updateContextBadge();
     this.updateFaceModeButtons();
+  }
+
+  updateContextBadge() {
+    if (!this.el.activeContextBadge || this.isGuest) return;
+    if (this.talkSettings.tone === 'church') {
+      this.el.activeContextBadge.textContent = '⛪ 教会';
+      this.el.activeContextBadge.hidden = false;
+    } else if (this.talkSettings.useGlossary) {
+      this.el.activeContextBadge.textContent = '📖 辞書';
+      this.el.activeContextBadge.hidden = false;
+    } else {
+      this.el.activeContextBadge.hidden = true;
+    }
   }
 
   configureInterpreter() {
@@ -493,10 +517,11 @@ class BidirectionalTalkApp {
   }
 
   applyLocaleUI() {
-    this.el.headerTitle.textContent = this.t('title');
-    this.el.myLangLabel.textContent = this.t('myLang');
-    this.el.roomTextInput.placeholder = this.t('textPlaceholder');
-    this.el.emptyTitle.textContent = this.t('emptyTitle');
+    this.el.headerTitle.textContent = this.talkSettings.myLang === 'ja' ? '会話通訳' : 'Translate';
+    if (this.el.unifiedTextInput) {
+      this.el.unifiedTextInput.placeholder = this.t('textPlaceholder');
+    }
+    this.el.emptyTitle.textContent = this.talkSettings.myLang === 'ja' ? '下のマイクをタップして話す' : this.t('emptyTitle');
     this.el.emptyDesc.textContent = this.isGuest ? this.t('emptyDescGuest') : this.t('emptyDescHost');
     this.el.settingsDialogTitle.textContent = this.t('settingsTitle');
     this.el.displayNameLabel.textContent = this.t('displayName');
@@ -578,6 +603,23 @@ class BidirectionalTalkApp {
       }
     });
 
+    // 言語入れ替え (⇄)
+    this.el.swapLangBtn?.addEventListener('click', () => {
+      const prevMy = this.talkSettings.myLang;
+      this.talkSettings.myLang = this.talkSettings.partnerLang;
+      this.talkSettings.partnerLang = prevMy;
+      this.el.myLangSelect.value = this.talkSettings.myLang;
+      this.el.partnerLangSelect.value = this.talkSettings.partnerLang;
+      this.saveTalkSettings();
+      this.applyLocaleUI();
+      this.updateFaceModeButtons();
+      this.renderAllMessages();
+      this.configureInterpreter();
+      if (this.el.inviteDefaultLangSelect) {
+        this.el.inviteDefaultLangSelect.value = this.talkSettings.partnerLang;
+      }
+    });
+
     // トーン＆用語集
     this.el.toneSelect?.addEventListener('change', () => {
       const tone = this.el.toneSelect.value;
@@ -586,11 +628,13 @@ class BidirectionalTalkApp {
       this.talkSettings.useGlossary = tone === 'church';
       this.el.useGlossaryCheck.checked = this.talkSettings.useGlossary;
       this.saveTalkSettings();
+      this.updateContextBadge();
     });
 
     this.el.useGlossaryCheck?.addEventListener('change', () => {
       this.talkSettings.useGlossary = this.el.useGlossaryCheck.checked;
       this.saveTalkSettings();
+      this.updateContextBadge();
     });
 
     // 自動読み上げトグル
@@ -604,7 +648,33 @@ class BidirectionalTalkApp {
       this.updateAutoSpeakUI();
     });
 
-    // ルームモードのマイク＆テキスト
+    // キーボード入力ドロワーの開閉
+    const toggleDrawer = () => {
+      this.textDrawerOpen = !this.textDrawerOpen;
+      this.el.textInputDrawer.hidden = !this.textDrawerOpen;
+      this.el.toggleKeyboardFaceBtn?.setAttribute('aria-pressed', String(this.textDrawerOpen));
+      this.el.toggleKeyboardRoomBtn?.setAttribute('aria-pressed', String(this.textDrawerOpen));
+      if (this.textDrawerOpen) {
+        this.el.unifiedTextInput?.focus();
+      }
+    };
+    this.el.toggleKeyboardFaceBtn?.addEventListener('click', toggleDrawer);
+    this.el.toggleKeyboardRoomBtn?.addEventListener('click', toggleDrawer);
+
+    // 共通テキスト送信フォーム
+    this.el.unifiedTextForm?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = this.el.unifiedTextInput.value.trim();
+      if (!text) return;
+      this.el.unifiedTextInput.value = '';
+      const side =
+        this.talkMode === 'face' && this.el.faceTextSenderSelect?.value === 'partner'
+          ? 'partner'
+          : 'self';
+      this.handleUserInput(text, side);
+    });
+
+    // ルームモードのマイク
     this.el.roomMicBtn.addEventListener('click', () => {
       if (this.isListening) {
         this.stopSpeechRecognition();
@@ -613,15 +683,7 @@ class BidirectionalTalkApp {
       }
     });
 
-    this.el.roomTextForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const text = this.el.roomTextInput.value.trim();
-      if (!text) return;
-      this.el.roomTextInput.value = '';
-      this.handleUserInput(text, 'self');
-    });
-
-    // 1端末対面モードのマイク＆テキスト
+    // 1端末対面モードのマイク
     this.el.faceMicSelfBtn?.addEventListener('click', () => {
       if (this.isListening && this.listeningSide === 'self') {
         this.stopSpeechRecognition();
@@ -638,17 +700,9 @@ class BidirectionalTalkApp {
       }
     });
 
-    this.el.faceTextForm?.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const text = this.el.faceTextInput.value.trim();
-      if (!text) return;
-      this.el.faceTextInput.value = '';
-      const side = this.el.faceTextSenderSelect.value === 'partner' ? 'partner' : 'self';
-      this.handleUserInput(text, side);
-    });
-
     // 招待ダイアログ
     this.el.openInviteBtn?.addEventListener('click', () => this.openInviteDialog());
+    this.el.quickInviteBtn?.addEventListener('click', () => this.openInviteDialog());
     this.el.inviteDefaultLangSelect?.addEventListener('change', () => this.refreshInviteQrAndUrl());
     this.el.copyInviteUrlBtn?.addEventListener('click', async () => {
       try {
@@ -770,7 +824,8 @@ class BidirectionalTalkApp {
   }
 
   setConnectionBadge(state, text) {
-    this.el.connStatusBadge.className = `status-pill status-${state}`;
+    this.el.connStatusBadge.className = `status-dot-pill status-${state}`;
+    this.el.connStatusBadge.title = text;
     this.el.connStatusText.textContent = text;
   }
 
@@ -784,22 +839,22 @@ class BidirectionalTalkApp {
     const myInfo = SUPPORTED_LANGUAGES[this.talkSettings.myLang] || SUPPORTED_LANGUAGES.ja;
     const partnerInfo = SUPPORTED_LANGUAGES[this.talkSettings.partnerLang] || SUPPORTED_LANGUAGES.en;
 
-    const speakPrompts = {
-      ja: '日本語で話す',
-      en: 'Speak English',
-      tl: 'Magsalita (Tagalog)',
-      id: 'Bicara (Indonesia)',
+    const shortLabels = {
+      ja: '日本語',
+      en: 'English',
+      tl: 'Tagalog',
+      id: 'Indonesia',
     };
 
     if (this.el.faceMicSelfLabel) {
-      this.el.faceMicSelfLabel.textContent = `${myInfo.flag} ${speakPrompts[myInfo.code] || myInfo.nameEn}`;
+      this.el.faceMicSelfLabel.textContent = shortLabels[myInfo.code] || myInfo.nameEn;
     }
     if (this.el.faceMicPartnerLabel) {
-      this.el.faceMicPartnerLabel.textContent = `${partnerInfo.flag} ${speakPrompts[partnerInfo.code] || partnerInfo.nameEn}`;
+      this.el.faceMicPartnerLabel.textContent = shortLabels[partnerInfo.code] || partnerInfo.nameEn;
     }
     if (this.el.faceTextSenderSelect) {
-      this.el.faceTextSenderSelect.options[0].textContent = `自分 (${myInfo.flag})`;
-      this.el.faceTextSenderSelect.options[1].textContent = `相手 (${partnerInfo.flag})`;
+      this.el.faceTextSenderSelect.options[0].textContent = `${myInfo.flag} ${shortLabels[myInfo.code] || myInfo.code}`;
+      this.el.faceTextSenderSelect.options[1].textContent = `${partnerInfo.flag} ${shortLabels[partnerInfo.code] || partnerInfo.code}`;
     }
     this.updateFacePartnerStage();
   }

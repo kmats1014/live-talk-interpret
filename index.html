@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Live Talk Interpret — 双方向リアルタイム通訳会話</title>
-  <link rel="stylesheet" href="./talk.css?v=2" />
+  <title>Live Talk Interpret — 双方向リアルタイム通訳</title>
+  <link rel="stylesheet" href="./talk.css?v=3" />
   <script src="./mqtt.min.js"></script>
   <script src="./qr-generator.js"></script>
   <script type="importmap">
@@ -15,180 +15,167 @@
     }
   </script>
 </head>
-<body data-theme="light" data-role="host" data-talk-mode="room" data-split-flip="false">
-  <!-- トップヘッダー -->
-  <header class="talk-header">
-    <div class="header-left">
-      <div class="brand-group">
-        <h1 class="talk-title" id="headerTitle">💬 双方向通訳</h1>
-        <span id="connStatusBadge" class="status-pill status-connecting">
+<body data-theme="light" data-role="host" data-talk-mode="face" data-split-flip="false">
+  <!-- ミニマルな1行トップバー（Google翻訳アプリ風） -->
+  <header class="gt-header">
+    <div class="gt-header-left">
+      <div class="gt-brand">
+        <span id="connStatusBadge" class="status-dot-pill status-connecting" title="接続状態">
           <span class="dot"></span>
-          <span id="connStatusText">接続準備中…</span>
+          <span id="connStatusText" class="sr-only">接続中</span>
         </span>
-        <span id="e2eeBadge" class="e2ee-pill" title="共有URLの鍵によるエンドツーエンド暗号化が有効です" hidden>🔒 E2EE</span>
+        <h1 class="gt-title" id="headerTitle">会話通訳</h1>
+        <span id="activeContextBadge" class="context-badge host-only" hidden>⛪ 教会</span>
+        <span id="e2eeBadge" class="e2ee-mini" title="エンドツーエンド暗号化有効" hidden>🔒</span>
       </div>
     </div>
 
-    <div class="header-right">
-      <!-- ホスト専用：モード切替（ルーム会話 / 1端末対面） -->
-      <div class="mode-segmented host-only" role="tablist" aria-label="会話モード切替">
-        <button type="button" id="modeRoomBtn" class="mode-seg-btn is-active" role="tab" aria-selected="true">
-          🌐 ルーム
+    <div class="gt-header-right">
+      <!-- モード切替（1端末対面 / 2端末ルーム） -->
+      <div class="gt-mode-pill host-only" role="tablist" aria-label="会話モード">
+        <button type="button" id="modeFaceBtn" class="gt-mode-btn is-active" role="tab" aria-selected="true" title="1台のスマホ/PCを置いて交互に話す">
+          🤝 対面
         </button>
-        <button type="button" id="modeFaceBtn" class="mode-seg-btn" role="tab" aria-selected="false">
-          🤝 1端末対面
+        <button type="button" id="modeRoomBtn" class="gt-mode-btn" role="tab" aria-selected="false" title="QRコードで相手を招待して各自の端末で話す">
+          🌐 ルーム
         </button>
       </div>
 
-      <!-- ホスト＆ルーム時：招待QRボタン -->
-      <button type="button" id="openInviteBtn" class="btn btn-primary host-room-only" title="相手をQRコードまたはURLで招待します">
-        📱 招待 <span id="peerCountBadge" class="count-chip">0</span>
+      <!-- 1端末対面時：相手側180°反転アイコン -->
+      <button type="button" id="flipSplitBtn" class="icon-btn face-only" aria-pressed="false" title="相手側を180°反転して向かい合って使う">
+        ⇅
       </button>
 
-      <!-- 自動読み上げトグル（デフォルトOFF・必要時のみON） -->
-      <button type="button" id="autoSpeakToggleBtn" class="btn btn-outline" aria-pressed="false" title="相手の翻訳を自動で音声読み上げします（必要な時だけON）">
+      <!-- ルーム時：招待QRアイコン -->
+      <button type="button" id="openInviteBtn" class="icon-btn icon-btn-accent host-room-only" title="QRコード/URLで相手を招待">
+        📱<span id="peerCountBadge" class="mini-badge">0</span>
+      </button>
+
+      <!-- 自動読み上げトグル（デフォルトOFF・必要時のみ） -->
+      <button type="button" id="autoSpeakToggleBtn" class="icon-btn" aria-pressed="false" title="自動読み上げ ON/OFF">
         <span id="autoSpeakIcon">🔇</span>
-        <span id="autoSpeakLabel" class="hide-xs">自動読上 OFF</span>
+        <span id="autoSpeakLabel" class="sr-only">自動読上 OFF</span>
       </button>
 
-      <!-- 設定・その他メニュー -->
-      <button type="button" id="openSettingsBtn" class="btn btn-outline btn-icon-only" title="設定・履歴・テーマ">
+      <!-- 設定アイコン（トーン・教会用語集・APIキー・テーマ・ログ） -->
+      <button type="button" id="openSettingsBtn" class="icon-btn" title="設定（トーン・教会用語集・API・ログ）">
         ⚙️
       </button>
     </div>
   </header>
 
-  <!-- コンパクト設定バー（言語・トーン・用語集） -->
-  <section class="talk-subbar" aria-label="会話設定">
-    <div class="subbar-group">
-      <label class="subbar-label" for="myLangSelect" id="myLangLabel">自分</label>
-      <select id="myLangSelect" class="compact-select">
-        <option value="ja">🇯🇵 日本語</option>
-        <option value="en">🇺🇸 English</option>
-        <option value="tl">🇵🇭 Tagalog</option>
-        <option value="id">🇮🇩 Bahasa Indonesia</option>
-      </select>
-    </div>
-
-    <span class="lang-swap-icon host-only" aria-hidden="true">⇄</span>
-
-    <div class="subbar-group host-only" id="partnerLangGroup">
-      <label class="subbar-label" for="partnerLangSelect" id="partnerLangLabel">相手</label>
-      <select id="partnerLangSelect" class="compact-select">
-        <option value="en">🇺🇸 English</option>
-        <option value="ja">🇯🇵 日本語</option>
-        <option value="tl">🇵🇭 Tagalog</option>
-        <option value="id">🇮🇩 Bahasa Indonesia</option>
-      </select>
-    </div>
-
-    <div class="subbar-divider host-only"></div>
-
-    <div class="subbar-group host-only">
-      <label class="subbar-label" for="toneSelect">トーン</label>
-      <select id="toneSelect" class="compact-select">
-        <option value="casual">💬 日常会話</option>
-        <option value="polite">💼 丁寧・ビジネス</option>
-        <option value="church">⛪ 教会・交わり</option>
-      </select>
-    </div>
-
-    <label class="glossary-toggle host-only" title="教会用語集（辞書）を双方向翻訳に適用します">
-      <input type="checkbox" id="useGlossaryCheck" />
-      <span>📖 教会用語集</span>
-    </label>
-
-    <!-- 1端末対面モード専用：相手側180°反転トグル -->
-    <button type="button" id="flipSplitBtn" class="btn-chip face-only" aria-pressed="false" title="スマホをテーブルに置いて向かい合う時、上半分を相手向きに180°回転します">
-      🔄 相手側を反転
-    </button>
-
-    <!-- API状態インジケーター（ホストのみ） -->
-    <span id="apiModePill" class="api-pill host-only" title="Gemini APIの接続状態">Demo</span>
-  </section>
-
-  <!-- 1端末対面・180°反転時の相手側ミラーパネル -->
+  <!-- 1端末対面・180°反転時の相手側エリア（上半分50%） -->
   <section id="facePartnerStage" class="face-partner-stage" aria-label="相手側の表示（180°反転）" hidden>
     <div class="face-stage-inner">
       <div class="face-stage-meta" id="facePartnerMeta">🇺🇸 English</div>
-      <div class="face-stage-main" id="facePartnerMain">Tap the button below to speak...</div>
+      <div class="face-stage-main" id="facePartnerMain">Tap the microphone to speak</div>
       <div class="face-stage-sub" id="facePartnerSub"></div>
     </div>
   </section>
 
-  <!-- メイン：チャットタイムライン -->
-  <main class="talk-main" id="talkMain">
+  <!-- メイン：広々とした会話・翻訳エリア -->
+  <main class="gt-main" id="talkMain">
     <div id="emptyState" class="empty-state">
-      <div class="empty-icon">💬</div>
-      <h2 id="emptyTitle">双方向リアルタイム通訳</h2>
-      <p id="emptyDesc">
-        マイクボタンを押して話すか、下の入力欄から送信すると自動で通訳されます。<br />
-        「📱 招待」からQRコードを共有すると、海外の相手もブラウザだけで参加できます。
+      <div class="empty-hero" id="emptyTitle">下のマイクをタップして話す</div>
+      <p class="empty-sub" id="emptyDesc">
+        お互いの言語を選んで話すだけでリアルタイムに通訳されます。<br />
+        別々のスマホで話す時は右上の「🌐 ルーム」からQR招待できます。
       </p>
-      <div class="empty-tips host-only" id="emptyTips">
-        <span class="tip-pill">🌐 ルーム：各自のスマホ/PCで会話</span>
-        <span class="tip-pill">🤝 1端末対面：1台を置いて交互に話す</span>
-        <span class="tip-pill">🔇 音声は必要な吹き出しだけ 🔊 で再生</span>
-      </div>
     </div>
 
     <div id="messagesList" class="messages-list" aria-live="polite"></div>
 
-    <!-- 音声認識中のリアルタイムプレビュー -->
+    <!-- 音声認識中のライブプレビュー -->
     <div id="interimBubble" class="interim-bubble" hidden>
-      <span class="interim-badge" id="interimSpeakerBadge">🎤 認識中…</span>
+      <span class="interim-badge" id="interimSpeakerBadge">🎤</span>
       <span id="interimText"></span>
     </div>
   </main>
 
-  <!-- 下部入力ドック -->
-  <footer class="talk-dock">
-    <!-- ルームモード用コントロール（ホスト・ゲスト共通） -->
-    <div id="roomControls" class="dock-room-controls">
-      <button type="button" id="roomMicBtn" class="mic-btn mic-btn-primary" aria-pressed="false">
-        <span class="mic-icon">🎤</span>
-        <span class="mic-label" id="roomMicLabel">タップして話す</span>
-      </button>
-
-      <form id="roomTextForm" class="text-input-form">
-        <input
-          type="text"
-          id="roomTextInput"
-          class="text-input"
-          placeholder="テキストで入力して送信..."
-          autocomplete="off"
-        />
-        <button type="submit" id="roomSendBtn" class="btn-send" title="送信">➤</button>
-      </form>
-    </div>
-
-    <!-- 1端末対面モード用コントロール（ホスト専用） -->
-    <div id="faceControls" class="dock-face-controls" hidden>
-      <div class="face-mic-row">
-        <button type="button" id="faceMicSelfBtn" class="mic-btn mic-btn-self" aria-pressed="false">
-          <span class="mic-icon">🎤</span>
-          <span class="mic-label" id="faceMicSelfLabel">🇯🇵 日本語で話す</span>
-        </button>
-        <button type="button" id="faceMicPartnerBtn" class="mic-btn mic-btn-partner" aria-pressed="false">
-          <span class="mic-icon">🎤</span>
-          <span class="mic-label" id="faceMicPartnerLabel">🇺🇸 Speak English</span>
-        </button>
-      </div>
-
-      <form id="faceTextForm" class="text-input-form">
-        <select id="faceTextSenderSelect" class="compact-select face-sender-select" title="どちらの言語で入力するか">
-          <option value="self">自分 (🇯🇵)</option>
-          <option value="partner">相手 (🇺🇸)</option>
+  <!-- 下部 Google翻訳アプリ風コントロールドック -->
+  <footer class="gt-dock">
+    <!-- 折りたたみ式テキスト入力バー（⌨️ボタンで開閉） -->
+    <div id="textInputDrawer" class="text-drawer" hidden>
+      <form id="unifiedTextForm" class="text-input-form">
+        <select id="faceTextSenderSelect" class="drawer-sender-select face-only" title="どちらの言語で入力するか">
+          <option value="self">🇯🇵 日本語</option>
+          <option value="partner">🇺🇸 English</option>
         </select>
         <input
           type="text"
-          id="faceTextInput"
+          id="unifiedTextInput"
           class="text-input"
-          placeholder="テキストで入力して通訳..."
+          placeholder="テキストを入力して通訳..."
           autocomplete="off"
         />
-        <button type="submit" class="btn-send" title="送信">➤</button>
+        <button type="submit" id="unifiedSendBtn" class="btn-send" title="送信">➤</button>
       </form>
+    </div>
+
+    <!-- Google翻訳風の言語バー：[ 言語A ▾ ] ⇄ [ 言語B ▾ ] -->
+    <div class="gt-lang-bar">
+      <select id="myLangSelect" class="gt-lang-pill" aria-label="自分の言語">
+        <option value="ja">🇯🇵 日本語</option>
+        <option value="en">🇺🇸 English</option>
+        <option value="tl">🇵🇭 Tagalog</option>
+        <option value="id">🇮🇩 Indonesia</option>
+      </select>
+
+      <button type="button" id="swapLangBtn" class="gt-swap-btn host-only" title="左右の言語を入れ替え" aria-label="言語を入れ替え">
+        ⇄
+      </button>
+
+      <select id="partnerLangSelect" class="gt-lang-pill host-only" aria-label="相手の言語">
+        <option value="en">🇺🇸 English</option>
+        <option value="ja">🇯🇵 日本語</option>
+        <option value="tl">🇵🇭 Tagalog</option>
+        <option value="id">🇮🇩 Indonesia</option>
+      </select>
+    </div>
+
+    <!-- 1端末対面モード：左右2つの丸いマイクボタン + 中央に⌨️ -->
+    <div id="faceControls" class="gt-mic-stage gt-mic-face">
+      <div class="mic-slot">
+        <button type="button" id="faceMicSelfBtn" class="gt-mic-circle gt-mic-self" aria-pressed="false" aria-label="自分の言語で話す">
+          <span class="mic-svg">🎤</span>
+        </button>
+        <span class="mic-caption" id="faceMicSelfLabel">日本語</span>
+      </div>
+
+      <div class="mic-center-slot">
+        <button type="button" id="toggleKeyboardFaceBtn" class="gt-sub-circle" aria-pressed="false" title="キーボードで入力">
+          ⌨️
+        </button>
+      </div>
+
+      <div class="mic-slot">
+        <button type="button" id="faceMicPartnerBtn" class="gt-mic-circle gt-mic-partner" aria-pressed="false" aria-label="相手の言語で話す">
+          <span class="mic-svg">🎤</span>
+        </button>
+        <span class="mic-caption" id="faceMicPartnerLabel">English</span>
+      </div>
+    </div>
+
+    <!-- ルームモード（ホスト＆ゲスト）：中央に大きな丸いマイクボタン + ⌨️ -->
+    <div id="roomControls" class="gt-mic-stage gt-mic-room" hidden>
+      <div class="mic-center-slot">
+        <button type="button" id="toggleKeyboardRoomBtn" class="gt-sub-circle" aria-pressed="false" title="キーボードで入力">
+          ⌨️
+        </button>
+      </div>
+
+      <div class="mic-slot">
+        <button type="button" id="roomMicBtn" class="gt-mic-circle gt-mic-large gt-mic-self" aria-pressed="false" aria-label="タップして話す">
+          <span class="mic-svg">🎤</span>
+        </button>
+        <span class="mic-caption" id="roomMicLabel">タップして話す</span>
+      </div>
+
+      <div class="mic-center-slot">
+        <button type="button" id="quickInviteBtn" class="gt-sub-circle host-room-only" title="QRコードで招待">
+          📱
+        </button>
+      </div>
     </div>
   </footer>
 
@@ -200,7 +187,7 @@
     </div>
     <div class="dialog-body">
       <p class="dialog-lead">
-        下のQRコードを読み取るかURLを共有すると、相手は<strong>アプリ不要・APIキー不要</strong>でブラウザからそのまま双方向会話に参加できます。
+        QRコードを読み取るかURLを送ると、相手は<strong>アプリ不要・APIキー不要</strong>でそのまま双方向会話に参加できます。
       </p>
 
       <div class="invite-qr-wrap">
@@ -208,7 +195,7 @@
         <div class="invite-meta">
           <div class="invite-row">
             <span class="invite-label">相手の初期言語</span>
-            <select id="inviteDefaultLangSelect" class="compact-select">
+            <select id="inviteDefaultLangSelect" class="field-input">
               <option value="en">🇺🇸 English</option>
               <option value="tl">🇵🇭 Tagalog</option>
               <option value="id">🇮🇩 Bahasa Indonesia</option>
@@ -219,10 +206,10 @@
             <span class="invite-label">ルームID</span>
             <div class="room-id-row">
               <code id="inviteRoomIdCode">---</code>
-              <button type="button" id="regenRoomBtn" class="btn btn-outline btn-xs" title="新しいルームIDと暗号鍵を発行します">🔄 再発行</button>
+              <button type="button" id="regenRoomBtn" class="btn btn-outline btn-xs">🔄 再発行</button>
             </div>
           </div>
-          <p class="e2ee-note">🔒 共有URLには暗号鍵（#key=...）が含まれ、公開サーバー上でも会話内容は暗号化されます。</p>
+          <p class="e2ee-note">🔒 共有URLの暗号鍵（#key=...）により会話内容は暗号化されます。</p>
         </div>
       </div>
 
@@ -240,23 +227,38 @@
     </div>
   </dialog>
 
-  <!-- 設定・履歴・ユーティリティモーダル -->
+  <!-- 設定モーダル（トーン・教会用語集・音声エンジン・APIキー・履歴） -->
   <dialog id="settingsDialog" class="talk-dialog">
     <div class="dialog-header">
-      <h2 id="settingsDialogTitle">⚙️ 会話設定</h2>
+      <h2 id="settingsDialogTitle">⚙️ 設定</h2>
       <button type="button" class="btn-close-dialog" data-close-dialog="settingsDialog" aria-label="閉じる">✕</button>
     </div>
     <div class="dialog-body">
+      <!-- ホスト専用：会話トーン＆教会用語集 -->
+      <div class="setting-field host-only">
+        <label for="toneSelect">会話トーン</label>
+        <select id="toneSelect" class="field-input">
+          <option value="casual">💬 日常会話（フレンドリー）</option>
+          <option value="polite">💼 丁寧・ビジネス</option>
+          <option value="church">⛪ 教会・交わり</option>
+        </select>
+      </div>
+
+      <label class="setting-check-row host-only">
+        <input type="checkbox" id="useGlossaryCheck" />
+        <span>📖 教会用語集（辞書）を双方向翻訳に適用する</span>
+      </label>
+
       <div class="setting-field">
         <label for="displayNameInput" id="displayNameLabel">あなたの表示名</label>
-        <input type="text" id="displayNameInput" class="field-input" maxlength="24" placeholder="例: Koichi / Host" />
+        <input type="text" id="displayNameInput" class="field-input" maxlength="24" placeholder="例: Koichi" />
       </div>
 
       <div class="setting-field">
-        <label for="ttsEngineSelect" id="ttsEngineLabel">音声読み上げエンジン（🔊ボタン / 自動読上時）</label>
+        <label for="ttsEngineSelect" id="ttsEngineLabel">音声読み上げエンジン（🔊タップ / 自動読上時）</label>
         <select id="ttsEngineSelect" class="field-input">
-          <option value="browser">⚡ ブラウザ標準音声（最速・無料・オフライン可）</option>
-          <option value="gemini">✨ Gemini AI音声（自然で高品質・ホストAPI使用）</option>
+          <option value="browser">⚡ ブラウザ標準音声（最速・無料）</option>
+          <option value="gemini">✨ Gemini AI音声（高品質・ホストAPI使用）</option>
         </select>
       </div>
 
@@ -268,14 +270,13 @@
         </div>
       </div>
 
-      <!-- ホスト専用：Gemini APIキー確認・設定（index.htmlと共有） -->
       <div class="setting-field host-only">
-        <label for="talkApiKeyInput">Gemini APIキー（礼拝通訳画面と自動共有）</label>
+        <label for="talkApiKeyInput">Gemini APIキー <span id="apiModePill" class="api-pill">Demo</span></label>
         <div class="url-copy-box">
           <input type="password" id="talkApiKeyInput" class="field-input" placeholder="AIzaSy...（未設定時はデモ動作）" />
           <button type="button" id="saveTalkApiKeyBtn" class="btn btn-primary">保存</button>
         </div>
-        <p class="field-hint">既存の礼拝通訳（index.html）で設定済みのAPIキー・モデル・用語集を自動で読み込みます。</p>
+        <p class="field-hint">同じブラウザで設定済みのAPIキー・用語集と自動共有されます。</p>
       </div>
 
       <hr class="dialog-divider" />
@@ -283,17 +284,16 @@
       <div class="setting-field">
         <label id="historyActionsLabel">会話ログ</label>
         <div class="inline-actions">
-          <button type="button" id="copyLogBtn" class="btn btn-outline">📋 全文コピー</button>
+          <button type="button" id="copyLogBtn" class="btn btn-outline">📋 コピー</button>
           <button type="button" id="exportLogBtn" class="btn btn-outline">📥 .txt 保存</button>
-          <button type="button" id="clearLogBtn" class="btn btn-danger-outline">🗑 履歴クリア</button>
+          <button type="button" id="clearLogBtn" class="btn btn-danger-outline">🗑 クリア</button>
         </div>
       </div>
     </div>
   </dialog>
 
-  <!-- トースト通知 -->
   <div id="toast" class="toast" hidden></div>
 
-  <script type="module" src="./talk.js"></script>
+  <script type="module" src="./talk.js?v=3"></script>
 </body>
 </html>
